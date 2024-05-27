@@ -23,13 +23,10 @@ library(ggplot2)
 library(plotly)
 
 
-
 # Setting the working directory and loading in the required shape file
 setwd("C:/COGS_Portfolio/Programming/GDAA_P6-7/UZ_World")
 
 shp_world <- st_read("world.shp")
-
-
 
 
 # Removing geometry column using 'st_drop' function
@@ -85,7 +82,6 @@ tapply(validation$GDP_High_Low, validation$GDP_High_Low, length)
 # Running 10-fold cross validation algorithm to set up model parameters and ensure training accuracy
 control <- trainControl(method="cv", number=10)
 metric <- "Accuracy"
-
 
 
 
@@ -187,7 +183,6 @@ cm5
 
 
 
-
 # Bar Plot Summary (excluding LDA)
 # This plot confirms my findings that the C&RT result showed the best accuracy, with the KNN result showing the worst.
 # I was unable to include the LDA model in these results (error message stated that there were different numbers of resamples in each model). 
@@ -195,6 +190,7 @@ cm5
 results <- resamples(list(cart=fit.cart, knn=fit.knn, svm=fit.svm, glm=fit.glm))
 summary(results)
 results_df <- as.data.frame(results)
+
 
 results_tidy <- results_df %>% 
   pivot_longer(names_to = "Model", values_to = "Accuracy", -Resample) %>% 
