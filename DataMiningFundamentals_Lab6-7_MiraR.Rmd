@@ -1,3 +1,14 @@
+## Project 6/7: 
+# This code performs a series of operations aimed at building and evaluating predictive models for classifying countries based on their GDP status. 
+# Initially, it loads required packages and a shapefile containing world data. It calculates the median GDP and creates a binary target variable based on 
+# whether a country's GDP is above or below the median. After selecting relevant predictors and preparing the data, it splits it into training and 
+# validation sets. Then, it trains several classification models, including Linear Discriminant Analysis (LDA), Classification and Regression Trees (C&RT), 
+# k-Nearest Neighbors (KNN), Support Vector Machines (SVMs), and Logistic Regression. Model performance is evaluated using confusion matrices. Notably, 
+# C&RT emerges as the best-performing model. Additionally, lollipop charts are generated to visualize variable importance, revealing that 'GDP_CAP' is the 
+# most influential predictor across models, with some variation in the importance of other variables between models. Overall, the analysis offers insights 
+# into the factors influencing a country's GDP status and the effectiveness of different predictive modeling approaches in this context.
+
+
 # Loading required packages
 library(tidyverse)
 library(sf)
