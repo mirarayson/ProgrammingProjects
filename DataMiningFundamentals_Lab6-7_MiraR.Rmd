@@ -1,0 +1,250 @@
+#Loading required packages
+library(tidyverse)
+library(sf)
+library(plotly)
+library(caret)
+library(likert)
+library(grid)
+library(gridExtra)
+library(ggpubr)
+library(dplyr)
+library(ggplot2)
+library(plotly)
+
+
+
+#Setting the working directory and loading in the required shape file
+setwd("C:/COGS_Portfolio/Programming/GDAA_P6-7/UZ_World")
+
+shp_world <- st_read("world.shp")
+
+
+
+
+#Removing geometry column using 'st_drop' function
+shp_world <- shp_world %>%
+  st_drop_geometry()
+  
+
+#Creating value for median GDP  
+median_gdp <- median(shp_world$GDP_CAP, na.rm = TRUE)
+
+
+#Using median_gdp as a marker to create values for newly created target variable 'GDP_High_Low'. When a country's GDP is equal to or above 'median_gdp', the 'GDP_High_Low' value will be 'High' - and when below 'median_gdp', 'Low'.
+shp_world$GDP_High_Low <- ifelse(shp_world$GDP_CAP >= median_gdp, "High", "Low")
+
+
+#Creating a subset of my data by selecting 10 predictors to serve as independent variables in my model
+#I chose the following due to immediate relativity to the task at hand.I decided that variables relating to population stats regarding education and residency, GDP, area type and size would be some of the most important in this lab. There were a couple variables (such as POP_INCR, which had negative values) that I wanted to use, however it turned out to not be possible.
+sub_shp_world <- shp_world %>%
+  select("SQKM_CNTRY", "REGION", "POPULATN", "URBAN", "LITERACY", "GDP_CAP", "BIRTH_RT", "DEATH_RT", "FERTILTY", "GDP_High_Low")
+  
+
+#Changing categorical variables "GDP_High_Low" and "REGION" to factor variables to ensure they run through models correctly
+sub_shp_world$GDP_High_Low <- as.factor(sub_shp_world$GDP_High_Low)
+levels(sub_shp_world$GDP_High_Low)
+class(sub_shp_world$GDP_High_Low)
+
+
+sub_shp_world$REGION <- as.factor(sub_shp_world$REGION)
+levels(sub_shp_world$REGION)
+class(sub_shp_world$REGION)
+
+
+#ensuring there are no missing values in my dataset. There were none!
+sub_shp_world_no_na <- drop_na(sub_shp_world)
+
+
+#I decided to not run any per-capita calculations as we did in tutorial as I did not find any other applicable variables I wanted to use that weren't already percentages of other variables.
+
+
+#Creating training and validation datasets with a 75/25 split.
+inTraining <- createDataPartition(sub_shp_world$GDP_High_Low, p=0.75, list=FALSE)
+training <- sub_shp_world[inTraining,]
+validation <- sub_shp_world[-inTraining,]
+
+
+#Ensuring that there is a 50/50 split between 'High' and 'Low' values in my validation set
+tapply(validation$GDP_High_Low, validation$GDP_High_Low, length)
+
+
+#Running 10-fold cross validation algorithm to set up model parameters and ensure training accuracy
+control <- trainControl(method="cv", number=10)
+metric <- "Accuracy"
+
+
+
+
+#Training model using Linear Discriminant Analysis (LDA)
+set.seed(123)
+fit.lda <- train (GDP_High_Low~., data=training, method="lda", metric=metric, trcontrol=control)
+predictions <- predict (fit.lda, validation)
+predictions
+
+
+cm <- confusionMatrix(predictions, as.factor(validation$GDP_High_Low))
+cm
+
+
+#Training model using Classification and Regression Trees (C&RT)
+fit.cart <- train (GDP_High_Low~., data=training, method="rpart", metric=metric, trControl=control)
+predictions <- predict(fit.cart, validation)
+
+
+cm2 <- confusionMatrix(predictions, as.factor(validation$GDP_High_Low))
+cm2
+
+
+#This model ended up working the best! Here is the confusion matrix plot for the C&RT model 
+cm2_d <- as.data.frame(cm2$table)
+cm2_d$diag <- cm2_d$Prediction == cm2_d$Reference
+cm2_d$ndiag <- cm2_d$Prediction != cm2_d$Reference
+cm2_d[cm2_d == 0] <- NA
+cm2_d$Reference <-  reverse.levels(cm2_d$Reference)
+cm2_d$ref_freq <- cm2_d$Freq * ifelse(is.na(cm2_d$diag),-1,1)
+
+
+plt2 <-  ggplot(data = cm2_d, aes(x = Prediction , y =  Reference, fill = Freq))+
+  scale_x_discrete(position = "top") +
+  geom_tile( data = cm2_d,aes(fill = ref_freq)) +
+  scale_fill_gradient2(guide = FALSE ,low="red3",high="orchid4", midpoint = 0, na.value = 'white') +
+  geom_text(data = cm2_d, aes(label = ifelse(is.na(Freq), "NA", as.character(Freq))), color = 'black', size = 3) +
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        panel.border = element_blank(),
+        plot.background = element_blank(),
+        axis.line = element_blank(),
+  )
+plt2
+
+
+
+#Training model using k-Nearest Neighbors (KNN)
+set.seed(123)
+fit.knn <- train(GDP_High_Low~., data=training, method="knn", metric=metric, trControl=control)
+predictions <- predict(fit.knn, validation)
+
+cm3 <- confusionMatrix(predictions, as.factor(validation$GDP_High_Low))
+cm3
+
+
+#This model was definitely the worst preforming. Here is the data confusion matrix for the KNN model:
+cm3_d <- as.data.frame(cm3$table)
+cm3_d$diag <- cm3_d$Prediction == cm3_d$Reference 
+cm3_d$ndiag <- cm3_d$Prediction != cm3_d$Reference
+cm3_d[cm3_d == 0] <- NA
+cm3_d$Reference <-  reverse.levels(cm3_d$Reference)
+cm3_d$ref_freq <- cm3_d$Freq * ifelse(is.na(cm3_d$diag),-1,1)
+
+plt3 <-  ggplot(data = cm3_d, aes(x = Prediction , y =  Reference, fill = Freq))+
+  scale_x_discrete(position = "top") +
+  geom_tile( data = cm3_d,aes(fill = ref_freq)) +
+  scale_fill_gradient2(guide = FALSE ,low="red3",high="orchid4", midpoint = 0,na.value = 'white') +
+  geom_text(aes(label = Freq), color = 'black', size = 3)+
+  theme_bw() +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+        legend.position = "none",
+        panel.border = element_blank(),
+        plot.background = element_blank(),
+        axis.line = element_blank(),
+  )
+plt3
+
+
+
+#Training model using Support Vector Machines (SVMs)
+set.seed(123)
+fit.svm <- train(GDP_High_Low~., data=training, method="svmRadial", metric=metric, trControl=control)
+predictions <-predict(fit.svm, validation)
+
+cm4 <- confusionMatrix(predictions, as.factor(validation$GDP_High_Low))
+cm4
+
+
+
+#Training model using Logistic Regression
+set.seed(123)
+fit.glm <- train(GDP_High_Low~., data=training, method="glm", metric=metric, trControl=control)
+predictions <- predict(fit.glm, validation)
+
+cm5 <- confusionMatrix(predictions, as.factor(validation$GDP_High_Low))
+cm5
+
+
+
+
+#Bar Plot Summary (excluding LDA)
+#This plot confirms my findings that the C&RT result showed the best accuracy, with the KNN result showing the worst.I was unable to include the LDA model in these results (error message stated that there were different numbers of resamples in each model). Had the LDA model been included, it most probably would have come in second place.
+results <- resamples(list(cart=fit.cart, knn=fit.knn, svm=fit.svm, glm=fit.glm))
+summary(results)
+results_df <- as.data.frame(results)
+
+results_tidy <- results_df %>% 
+  pivot_longer(names_to = "Model", values_to = "Accuracy", -Resample) %>% 
+  group_by(Model) %>% 
+  summarise(Mean_Accuracy = mean(Accuracy))
+  
+
+mean_acc <- results_tidy %>% 
+  ggplot(aes(x=fct_reorder(Model, Mean_Accuracy), y=Mean_Accuracy))+
+  geom_bar(stat = "identity")+
+  coord_flip()+
+  xlab("Mean Accuracy")+
+  ylab("Model")+
+  theme(text = element_text(size = 20))
+
+mean_acc
+
+
+
+
+#Creating lollipop charts for C&RT and GLM models - was unable to derive charts from any other model.
+importance2 <- varImp(fit.cart)
+importance5 <- varImp(fit.glm)
+
+
+imp2 <- importance2$importance
+imp5 <- importance5$importance
+
+
+p2 <- imp2 %>% 
+  mutate(Predictor = rownames(imp2)) %>% 
+  pivot_longer(names_to = "GDP_High_Low", values_to = "Importance", -Predictor) %>%
+  ggplot(aes(x=Predictor, y=Importance))+
+  geom_segment(aes(x=Predictor, xend=Predictor, y=0, yend=Importance), color="skyblue") +
+  geom_point(color="blue", size=4, alpha=0.6) +
+  theme_light() +
+  coord_flip() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank())+
+  ylab("Classification & Regression Tree")+
+  xlab("")
+  
+
+p5 <- imp5 %>% 
+  mutate(Predictor = rownames(imp5)) %>% 
+  pivot_longer(names_to = "GDP_High_Low", values_to = "Importance", -Predictor) %>%
+  ggplot(aes(x=Predictor, y=Importance))+
+  geom_segment(aes(x=Predictor, xend=Predictor, y=0, yend=Importance), color="skyblue") +
+  geom_point(color="blue", size=4, alpha=0.6) +
+  theme_light() +
+  coord_flip() +
+  theme(
+    panel.grid.major.y = element_blank(),
+    panel.border = element_blank(),
+    axis.ticks.y = element_blank())+
+  ylab("Logistic Regression")+
+  xlab("")
+  
+
+#I ended up getting rid of 'plot_importance <-' object creation function that we used in tutorial and was able to view the charts in R without exporting, before that I was receiving error messages!
+ggarrange(p2, p5, ncol = 1, heights = c(4, 4, 4, 4, 4), width = 6) +
+  theme(text = element_text(size = 12)) +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  theme(plot.margin = margin(2, 2, 2, 2))
+  
+
+#The results of these charts show that the overall most important predictors for both models was 'GDP_CAP'. After this, the results differ slightly in order of importance. Specifically, the REGION variable was much more important in the Logistic Regression than in the C&RT.Further, URBAN, LITERACY, and POPULATN had less importance in determinations that I originally predicted for both models.
